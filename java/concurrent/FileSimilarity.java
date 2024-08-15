@@ -1,7 +1,12 @@
 import java.io.*;
 import java.util.*;
+import java.util.concurrent.Semaphore;
 
 public class FileSimilarity {
+
+    private static final int MAX_THREADS = 100;
+    private static final Semaphore semaphore = new Semaphore(MAX_THREADS);
+
 
     public static void main(String[] args) throws Exception {
         if (args.length < 2) {
@@ -12,12 +17,39 @@ public class FileSimilarity {
         // Create a map to store the fingerprint for each file
         Map<String, List<Long>> fileFingerprints = new HashMap<>();
 
-        // Calculate the fingerprint for each file
+        List<Thread> threads = new ArrayList<>();
+
+
+        // Calculate the fingerprint for each file concurrently
         for (String path : args) {
-            List<Long> fingerprint = fileSum(path);
-            fileFingerprints.put(path, fingerprint);
+
+            Thread thread = new Thread(() -> {
+                try {
+                    semaphore.acquire();
+
+                    List<Long> fingerprint = fileSum(path);
+
+                    synchronized (fileFingerprints) {
+                        fileFingerprints.put(path, fingerprint);
+                    }
+                } catch (IOException | InterruptedException e) {
+                    e.printStackTrace();
+                } finally {
+                    semaphore.release();
+                }
+            });
+
+            threads.add(thread);
+            thread.start();
         }
 
+        for (Thread thread : threads) {
+            thread.join();
+        }
+
+        threads.clear();
+
+      
         // Compare each pair of files
         for (int i = 0; i < args.length; i++) {
             for (int j = i + 1; j < args.length; j++) {
